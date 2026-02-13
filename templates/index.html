@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Android Vision Chat v2</title>
+<title>Android Vision Chat v3</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
@@ -16,7 +16,7 @@ body {
 #chat {
     margin-top: 15px;
     display: flex;
-    flex-direction: column; /* Новые сообщения сверху */
+    flex-direction: column;
     gap: 10px;
 }
 
@@ -34,7 +34,7 @@ body {
     background: #1e3a1e;
 }
 
-.card.image-card img {
+.card img {
     max-width: 100%;
     border-radius: 8px;
 }
@@ -80,7 +80,6 @@ button {
 
 let base64Image = null;
 let firstMessage = true;
-let imageCardElement = null;
 
 document.getElementById("imageInput").addEventListener("change", function(e){
     const file = e.target.files[0];
@@ -91,17 +90,11 @@ document.getElementById("imageInput").addEventListener("change", function(e){
 
         base64Image = reader.result.split(",")[1];
 
-        // Удаляем старую картинку если была
-        if(imageCardElement){
-            imageCardElement.remove();
-        }
+        // Добавляем картинку как обычное сообщение СВЕРХУ
+        const imageHTML = `<img src="${reader.result}">`;
+        addMessage("Ты", imageHTML, "user", true);
 
-        imageCardElement = document.createElement("div");
-        imageCardElement.className = "card image-card";
-        imageCardElement.innerHTML = `<img src="${reader.result}">`;
-
-        // Добавляем в самый низ чата
-        document.getElementById("chat").appendChild(imageCardElement);
+        firstMessage = true;
     };
     reader.readAsDataURL(file);
 });
@@ -152,26 +145,29 @@ async function sendToAI(){
         addMessage("AI", data.answer, "ai");
 
         firstMessage = false;
-        base64Image = null; // после отправки больше не шлём картинку
+        base64Image = null;
 
     } catch (error) {
         addMessage("Ошибка", error.toString(), "ai");
     }
 }
 
-function addMessage(author, text, type){
+function addMessage(author, text, type, isHTML=false){
     const chat = document.getElementById("chat");
 
     const div = document.createElement("div");
     div.className = "card " + type;
-    div.innerHTML = "<b>" + author + ":</b><br>" + text;
 
-    chat.prepend(div); // Новые сообщения сверху
+    if(isHTML){
+        div.innerHTML = "<b>" + author + ":</b><br>" + text;
+    } else {
+        div.innerHTML = "<b>" + author + ":</b><br>" + text.replace(/\n/g, "<br>");
+    }
+
+    chat.prepend(div);
 }
 
 </script>
 
 </body>
 </html>
-
-
