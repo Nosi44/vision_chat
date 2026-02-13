@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Android Vision Chat</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="manifest" href="manifest.json">
+<style>
+body { font-family: Arial; margin: 10px; background: #111; color: white; }
+img { max-width: 100%; border-radius: 8px; margin-bottom: 10px; }
+textarea, input { width: 100%; padding: 10px; border-radius: 8px; border: none; }
+button { padding: 10px; margin-top: 5px; border-radius: 8px; border: none; background: #4CAF50; color: white; }
+#chat { margin-top: 15px; white-space: pre-wrap; }
+.card { background: #222; padding: 10px; border-radius: 10px; margin-bottom: 10px; }
+</style>
+</head>
+<body>
+
+<h2>📱 Android Vision Chat</h2>
+
+<input type="file" id="imageInput" accept="image/*"><br><br>
+<img id="preview">
+
+<textarea id="prompt" placeholder="Напиши или скажи запрос..."></textarea>
+
+<button onclick="startVoice()">🎤 Голос</button>
+<button onclick="sendToAI()">Отправить</button>
+
+<div id="chat"></div>
+
+<script>
+
+let base64Image = "";
+
+document.getElementById("imageInput").addEventListener("change", function(e){
+    const file = e.target.files[0];
+    const reader = new FileReader();
+    reader.onload = function(){
+        base64Image = reader.result.split(",")[1];
+        document.getElementById("preview").src = reader.result;
+    };
+    reader.readAsDataURL(file);
+});
+
+// Голосовой ввод
+function startVoice(){
+    const recognition = new webkitSpeechRecognition();
+    recognition.lang = "ru-RU";
+    recognition.start();
+    recognition.onresult = function(event){
+        document.getElementById("prompt").value = event.results[0][0].transcript;
+    };
+}
+
+async function sendToAI(){
+
+    const prompt = document.getElementById("prompt").value;
+    if(!base64Image) return alert("Выбери изображение!");
+
+    document.getElementById("chat").innerHTML += `<div class="card"><b>Ты:</b> ${prompt}</div>`;
+    document.getElementById("chat").innerHTML += `<div class="card">AI думает...</div>`;
+
+    const response = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            prompt: prompt,
+            image: base64Image
+        })
+    });
+
+    const data = await response.json();
+
+    document.getElementById("chat").innerHTML += `<div class="card"><b>AI:</b> ${data.answer}</div>`;
+}
+
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('service-worker.js');
+}
+
+</script>
+
+</body>
+</html>
