@@ -6,7 +6,6 @@ app = Flask(__name__)
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# ===== Глобальная память чата =====
 conversation_history = []
 
 
@@ -25,39 +24,41 @@ def analyze():
     image_base64 = data.get("image")
     is_first_message = data.get("first", False)
 
-    # Если это первое сообщение — очищаем память
+    if not prompt:
+        return jsonify({"error": "Empty prompt"}), 400
+
+    # Если новая сессия — очищаем память
     if is_first_message:
         conversation_history = []
 
-        # Добавляем картинку только один раз
-        conversation_history.append({
-            "role": "user",
-            "content": [
-                {"type": "input_text", "text": prompt},
-                {
-                    "type": "input_image",
-                    "image_url": f"data:image/png;base64,{image_base64}"
-                }
-            ]
-        })
-    else:
-        # Добавляем только текст
-        conversation_history.append({
-            "role": "user",
-            "content": [
-                {"type": "input_text", "text": prompt}
-            ]
+    # Формируем контент пользователя
+    user_content = [
+        {"type": "input_text", "text": prompt}
+    ]
+
+    # Добавляем картинку только если она реально есть
+    if image_base64:
+        user_content.append({
+            "type": "input_image",
+            "image_url": f"data:image/png;base64,{image_base64}"
         })
 
-    # Отправляем всю историю в OpenAI
-    response = client.responses.create(
-        model="gpt-4.1-mini",  # mini быстрее и дешевле
-        input=conversation_history
-    )
+    conversation_history.append({
+        "role": "user",
+        "content": user_content
+    })
 
-    answer = response.output_text
+    try:
+        response = client.responses.create(
+            model="gpt-4.1-mini",
+            input=conversation_history
+        )
 
-    # Добавляем ответ ассистента в память
+        answer = response.output_text
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
     conversation_history.append({
         "role": "assistant",
         "content": [
