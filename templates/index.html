@@ -22,7 +22,7 @@ img {
 #chat {
     margin-top: 15px;
     display: flex;
-    flex-direction: column-reverse; /* ВАЖНО — новые сообщения сверху */
+    flex-direction: column-reverse;
 }
 
 .card {
@@ -72,13 +72,20 @@ button {
 <script>
 
 let base64Image = "";
+let firstMessage = true;
 
 document.getElementById("imageInput").addEventListener("change", function(e){
     const file = e.target.files[0];
+    if(!file) return;
+
     const reader = new FileReader();
     reader.onload = function(){
         base64Image = reader.result.split(",")[1];
         document.getElementById("preview").src = reader.result;
+
+        // При смене картинки начинаем новую сессию
+        firstMessage = true;
+        document.getElementById("chat").innerHTML = "";
     };
     reader.readAsDataURL(file);
 });
@@ -89,27 +96,35 @@ async function sendToAI(){
     const prompt = promptInput.value.trim();
 
     if(!prompt) return;
-    if(!base64Image) return alert("Выбери изображение!");
 
-    // Очистить поле ввода
+    if(firstMessage && !base64Image)
+        return alert("Выбери изображение!");
+
     promptInput.value = "";
 
-    // Добавить сообщение пользователя
     addMessage("Ты", prompt);
 
-    // Отправка запроса
     try {
         const response = await fetch("/api/analyze", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 prompt: prompt,
-                image: base64Image
+                image: base64Image,
+                first: firstMessage
             })
         });
 
         const data = await response.json();
+
+        if(data.error){
+            addMessage("Ошибка", data.error);
+            return;
+        }
+
         addMessage("AI", data.answer);
+
+        firstMessage = false;
 
     } catch (error) {
         addMessage("Ошибка", error.toString());
@@ -123,7 +138,7 @@ function addMessage(author, text){
     div.className = "card";
     div.innerHTML = "<b>" + author + ":</b><br>" + text;
 
-    chat.prepend(div); // Новое сообщение сверху
+    chat.prepend(div);
 }
 
 </script>
