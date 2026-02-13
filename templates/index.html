@@ -4,14 +4,54 @@
 <meta charset="UTF-8">
 <title>Android Vision Chat</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="manifest" href="manifest.json">
+
 <style>
-body { font-family: Arial; margin: 10px; background: #111; color: white; }
-img { max-width: 100%; border-radius: 8px; margin-bottom: 10px; }
-textarea, input { width: 100%; padding: 10px; border-radius: 8px; border: none; }
-button { padding: 10px; margin-top: 5px; border-radius: 8px; border: none; background: #4CAF50; color: white; }
-#chat { margin-top: 15px; white-space: pre-wrap; }
-.card { background: #222; padding: 10px; border-radius: 10px; margin-bottom: 10px; }
+body {
+    font-family: Arial;
+    margin: 10px;
+    background: #111;
+    color: white;
+}
+
+img {
+    max-width: 100%;
+    border-radius: 8px;
+    margin-bottom: 10px;
+}
+
+#chat {
+    margin-top: 15px;
+    display: flex;
+    flex-direction: column-reverse; /* ВАЖНО — новые сообщения сверху */
+}
+
+.card {
+    background: #222;
+    padding: 10px;
+    border-radius: 10px;
+    margin-bottom: 10px;
+}
+
+.input-row {
+    display: flex;
+    gap: 5px;
+}
+
+input {
+    flex: 1;
+    padding: 10px;
+    border-radius: 8px;
+    border: none;
+}
+
+button {
+    padding: 10px 15px;
+    border-radius: 8px;
+    border: none;
+    background: #4CAF50;
+    color: white;
+    cursor: pointer;
+}
 </style>
 </head>
 <body>
@@ -19,12 +59,13 @@ button { padding: 10px; margin-top: 5px; border-radius: 8px; border: none; backg
 <h2>📱 Android Vision Chat</h2>
 
 <input type="file" id="imageInput" accept="image/*"><br><br>
+
 <img id="preview">
 
-<textarea id="prompt" placeholder="Напиши или скажи запрос..."></textarea>
-
-<button onclick="startVoice()">🎤 Голос</button>
-<button onclick="sendToAI()">Отправить</button>
+<div class="input-row">
+    <input type="text" id="prompt" placeholder="Напиши запрос...">
+    <button onclick="sendToAI()">Отправить</button>
+</div>
 
 <div id="chat"></div>
 
@@ -42,40 +83,47 @@ document.getElementById("imageInput").addEventListener("change", function(e){
     reader.readAsDataURL(file);
 });
 
-// Голосовой ввод
-function startVoice(){
-    const recognition = new webkitSpeechRecognition();
-    recognition.lang = "ru-RU";
-    recognition.start();
-    recognition.onresult = function(event){
-        document.getElementById("prompt").value = event.results[0][0].transcript;
-    };
-}
-
 async function sendToAI(){
 
-    const prompt = document.getElementById("prompt").value;
+    const promptInput = document.getElementById("prompt");
+    const prompt = promptInput.value.trim();
+
+    if(!prompt) return;
     if(!base64Image) return alert("Выбери изображение!");
 
-    document.getElementById("chat").innerHTML += `<div class="card"><b>Ты:</b> ${prompt}</div>`;
-    document.getElementById("chat").innerHTML += `<div class="card">AI думает...</div>`;
+    // Очистить поле ввода
+    promptInput.value = "";
 
-    const response = await fetch("/api/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-            prompt: prompt,
-            image: base64Image
-        })
-    });
+    // Добавить сообщение пользователя
+    addMessage("Ты", prompt);
 
-    const data = await response.json();
+    // Отправка запроса
+    try {
+        const response = await fetch("/api/analyze", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                prompt: prompt,
+                image: base64Image
+            })
+        });
 
-    document.getElementById("chat").innerHTML += `<div class="card"><b>AI:</b> ${data.answer}</div>`;
+        const data = await response.json();
+        addMessage("AI", data.answer);
+
+    } catch (error) {
+        addMessage("Ошибка", error.toString());
+    }
 }
 
-if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('service-worker.js');
+function addMessage(author, text){
+    const chat = document.getElementById("chat");
+
+    const div = document.createElement("div");
+    div.className = "card";
+    div.innerHTML = "<b>" + author + ":</b><br>" + text;
+
+    chat.prepend(div); // Новое сообщение сверху
 }
 
 </script>
