@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+        <!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
@@ -69,7 +69,6 @@ button {
 <h2>📱 Android Vision Chat</h2>
 
 <input type="file" id="imageInput" accept="image/*"><br><br>
-
 <img id="preview">
 
 <div class="input-row">
@@ -81,7 +80,7 @@ button {
 
 <script>
 
-let base64Image = "";
+let base64Image = null;
 let firstMessage = true;
 
 document.getElementById("imageInput").addEventListener("change", function(e){
@@ -96,7 +95,7 @@ document.getElementById("imageInput").addEventListener("change", function(e){
     reader.readAsDataURL(file);
 });
 
-// Enter отправляет сообщение (Shift+Enter — перенос строки)
+// Enter отправляет, Shift+Enter перенос строки
 document.getElementById("prompt").addEventListener("keydown", function(e){
     if(e.key === "Enter" && !e.shiftKey){
         e.preventDefault();
@@ -116,6 +115,7 @@ async function sendToAI(){
     addMessage("Ты", prompt, "user");
 
     try {
+
         const response = await fetch("/api/analyze", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -125,6 +125,11 @@ async function sendToAI(){
                 first: firstMessage
             })
         });
+
+        if(!response.ok){
+            addMessage("Ошибка", "Ошибка сервера", "ai");
+            return;
+        }
 
         const data = await response.json();
 
@@ -136,9 +141,7 @@ async function sendToAI(){
         addMessage("AI", data.answer, "ai");
 
         firstMessage = false;
-
-        // После первого отправления изображения больше не шлём его
-        base64Image = null;
+        base64Image = null; // после отправки картинку больше не шлём
 
     } catch (error) {
         addMessage("Ошибка", error.toString(), "ai");
@@ -153,8 +156,6 @@ function addMessage(author, text, type){
     div.innerHTML = "<b>" + author + ":</b><br>" + text;
 
     chat.appendChild(div);
-
-    // автопрокрутка вниз
     chat.scrollTop = chat.scrollHeight;
 }
 
