@@ -22,14 +22,22 @@ img {
 #chat {
     margin-top: 15px;
     display: flex;
-    flex-direction: column-reverse;
+    flex-direction: column;
+    gap: 10px;
 }
 
 .card {
     background: #222;
     padding: 10px;
     border-radius: 10px;
-    margin-bottom: 10px;
+}
+
+.card.user {
+    background: #2a2a2a;
+}
+
+.card.ai {
+    background: #1e3a1e;
 }
 
 .input-row {
@@ -37,11 +45,13 @@ img {
     gap: 5px;
 }
 
-input {
+textarea {
     flex: 1;
     padding: 10px;
     border-radius: 8px;
     border: none;
+    resize: none;
+    height: 60px;
 }
 
 button {
@@ -63,7 +73,7 @@ button {
 <img id="preview">
 
 <div class="input-row">
-    <input type="text" id="prompt" placeholder="Напиши запрос...">
+    <textarea id="prompt" placeholder="Напиши запрос..."></textarea>
     <button onclick="sendToAI()">Отправить</button>
 </div>
 
@@ -82,12 +92,16 @@ document.getElementById("imageInput").addEventListener("change", function(e){
     reader.onload = function(){
         base64Image = reader.result.split(",")[1];
         document.getElementById("preview").src = reader.result;
-
-        // При смене картинки начинаем новую сессию
-        firstMessage = true;
-        document.getElementById("chat").innerHTML = "";
     };
     reader.readAsDataURL(file);
+});
+
+// Enter отправляет сообщение (Shift+Enter — перенос строки)
+document.getElementById("prompt").addEventListener("keydown", function(e){
+    if(e.key === "Enter" && !e.shiftKey){
+        e.preventDefault();
+        sendToAI();
+    }
 });
 
 async function sendToAI(){
@@ -97,12 +111,9 @@ async function sendToAI(){
 
     if(!prompt) return;
 
-    if(firstMessage && !base64Image)
-        return alert("Выбери изображение!");
-
     promptInput.value = "";
 
-    addMessage("Ты", prompt);
+    addMessage("Ты", prompt, "user");
 
     try {
         const response = await fetch("/api/analyze", {
@@ -118,27 +129,33 @@ async function sendToAI(){
         const data = await response.json();
 
         if(data.error){
-            addMessage("Ошибка", data.error);
+            addMessage("Ошибка", data.error, "ai");
             return;
         }
 
-        addMessage("AI", data.answer);
+        addMessage("AI", data.answer, "ai");
 
         firstMessage = false;
 
+        // После первого отправления изображения больше не шлём его
+        base64Image = null;
+
     } catch (error) {
-        addMessage("Ошибка", error.toString());
+        addMessage("Ошибка", error.toString(), "ai");
     }
 }
 
-function addMessage(author, text){
+function addMessage(author, text, type){
     const chat = document.getElementById("chat");
 
     const div = document.createElement("div");
-    div.className = "card";
+    div.className = "card " + type;
     div.innerHTML = "<b>" + author + ":</b><br>" + text;
 
-    chat.prepend(div);
+    chat.appendChild(div);
+
+    // автопрокрутка вниз
+    chat.scrollTop = chat.scrollHeight;
 }
 
 </script>
