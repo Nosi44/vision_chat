@@ -1,18 +1,18 @@
 from flask import Flask, request, jsonify, render_template
 from openai import OpenAI
-import os
 import sqlite3
-from datetime import datetime
+import os
 
 app = Flask(__name__)
+
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 DB_FILE = "chats.db"
 
 
-# =========================
-# ИНИЦИАЛИЗАЦИЯ БАЗЫ
-# =========================
+# ==========================
+# ИНИЦИАЛИЗАЦИЯ БД
+# ==========================
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
@@ -20,7 +20,7 @@ def init_db():
     c.execute("""
         CREATE TABLE IF NOT EXISTS chats (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            created_at TEXT
+            title TEXT
         )
     """)
 
@@ -30,8 +30,7 @@ def init_db():
             chat_id INTEGER,
             role TEXT,
             content TEXT,
-            image TEXT,
-            timestamp TEXT
+            image TEXT
         )
     """)
 
@@ -42,24 +41,41 @@ def init_db():
 init_db()
 
 
-# =========================
-# ГЛАВНАЯ
-# =========================
+# ==========================
+# ГЛАВНАЯ СТРАНИЦА
+# ==========================
 @app.route("/")
 def home():
     return render_template("index.html")
 
 
-# =========================
-# СОЗДАТЬ ЧАТ
-# =========================
-@app.route("/api/create_chat", methods=["POST"])
-def create_chat():
+# ==========================
+# ПОЛУЧИТЬ СПИСОК ЧАТОВ
+# ==========================
+@app.route("/api/chats", methods=["GET"])
+def get_chats():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
 
-    now = datetime.utcnow().isoformat()
-    c.execute("INSERT INTO chats (created_at) VALUES (?)", (now,))
+    c.execute("SELECT id, title FROM chats ORDER BY id DESC")
+    chats = [{"id": row[0], "title": row[1]} for row in c.fetchall()]
+
+    conn.close()
+    return jsonify(chats)
+
+
+# ==========================
+# СОЗДАТЬ НОВЫЙ ЧАТ
+# ==========================
+@app.route("/api/chats", methods=["POST"])
+def create_chat():
+    data = request.json
+    title = data.get("title", "Новый чат")
+
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+
+    c.execute("INSERT INTO chats (title) VALUES (?)", (title,))
     chat_id = c.lastrowid
 
     conn.commit()
@@ -68,29 +84,10 @@ def create_chat():
     return jsonify({"chat_id": chat_id})
 
 
-# =========================
-# СПИСОК ЧАТОВ
-# =========================
-@app.route("/api/get_chats")
-def get_chats():
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-
-    c.execute("SELECT id, created_at FROM chats ORDER BY id DESC")
-    chats = c.fetchall()
-
-    conn.close()
-
-    return jsonify([
-        {"id": chat[0], "created_at": chat[1]}
-        for chat in chats
-    ])
-
-
-# =========================
-# ПОЛУЧИТЬ СООБЩЕНИЯ
-# =========================
-@app.route("/api/get_messages/<int:chat_id>")
+# ==========================
+# ПОЛУЧИТЬ СООБЩЕНИЯ ЧАТА
+# ==========================
+@app.route("/api/messages/<int:chat_id>", methods=["GET"])
 def get_messages(chat_id):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
@@ -102,40 +99,44 @@ def get_messages(chat_id):
         ORDER BY id ASC
     """, (chat_id,))
 
-    messages = c.fetchall()
+    messages = []
+    for role, content, image in c.fetchall():
+        messages.append({
+            "role": role,
+            "content": content,
+            "image": image
+        })
+
     conn.close()
-
-    return jsonify([
-        {"role": m[0], "content": m[1], "image": m[2]}
-        for m in messages
-    ])
+    return jsonify(messages)
 
 
-# =========================
+# ==========================
 # ОТПРАВКА СООБЩЕНИЯ
-# =========================
-@app.route("/api/send_message", methods=["POST"])
+# ==========================
+@app.route("/api/send", methods=["POST"])
 def send_message():
 
     data = request.json
     chat_id = data.get("chat_id")
-    prompt = data.get("prompt")
-    image_base64 = data.get("image")
+    content = data.get("content")
+    image = data.get("image")
+
+    if not chat_id:
+        return jsonify({"error": "Нет chat_id"}), 400
 
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
 
-    now = datetime.utcnow().isoformat()
-
-    # Сохраняем сообщение пользователя
+    # --- Сохраняем сообщение пользователя ---
     c.execute("""
-        INSERT INTO messages (chat_id, role, content, image, timestamp)
-        VALUES (?, ?, ?, ?, ?)
-    """, (chat_id, "user", prompt, image_base64, now))
+        INSERT INTO messages (chat_id, role, content, image)
+        VALUES (?, ?, ?, ?)
+    """, (chat_id, "user", content, image))
 
     conn.commit()
 
-    # Получаем всю историю
+    # --- Получаем всю историю ---
     c.execute("""
         SELECT role, content, image
         FROM messages
@@ -147,39 +148,46 @@ def send_message():
 
     openai_messages = []
 
-    for role, content, image in history:
+    for role, msg_content, msg_image in history:
 
-    message_content = []
+        message_content = []
 
-    if content is not None:
-        message_content.append({
-            "type": "input_text",
-            "text": content
+        # ВАЖНО: проверяем is not None, а не if content
+        if msg_content is not None:
+            message_content.append({
+                "type": "input_text",
+                "text": msg_content
+            })
+
+        if msg_image:
+            message_content.append({
+                "type": "input_image",
+                "image_url": f"data:image/png;base64,{msg_image}"
+            })
+
+        openai_messages.append({
+            "role": role,
+            "content": message_content
         })
 
-    if image:
-        message_content.append({
-            "type": "input_image",
-            "image_url": f"data:image/png;base64,{image}"
-        })
+    # --- Запрос к OpenAI ---
+    try:
+        response = client.responses.create(
+            model="gpt-4.1-mini",
+            input=openai_messages
+        )
 
-    openai_messages.append({
-        "role": role,
-        "content": message_content
-    })
+        answer = response.output_text
 
-    response = client.responses.create(
-        model="gpt-4.1-mini",
-        input=openai_messages
-    )
+    except Exception as e:
+        conn.close()
+        return jsonify({"error": str(e)}), 500
 
-    answer = response.output_text
-
-    # Сохраняем ответ AI
+    # --- Сохраняем ответ ассистента ---
     c.execute("""
-        INSERT INTO messages (chat_id, role, content, image, timestamp)
-        VALUES (?, ?, ?, ?, ?)
-    """, (chat_id, "assistant", answer, None, now))
+        INSERT INTO messages (chat_id, role, content, image)
+        VALUES (?, ?, ?, NULL)
+    """, (chat_id, "assistant", answer))
 
     conn.commit()
     conn.close()
@@ -187,7 +195,9 @@ def send_message():
     return jsonify({"answer": answer})
 
 
+# ==========================
+# ЗАПУСК
+# ==========================
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
-
