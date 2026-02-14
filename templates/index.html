@@ -2,83 +2,246 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Android Vision Chat</title>
+<title>Vision Chat Ultimate</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="manifest" href="manifest.json">
+
 <style>
-body { font-family: Arial; margin: 10px; background: #111; color: white; }
-img { max-width: 100%; border-radius: 8px; margin-bottom: 10px; }
-textarea, input { width: 100%; padding: 10px; border-radius: 8px; border: none; }
-button { padding: 10px; margin-top: 5px; border-radius: 8px; border: none; background: #4CAF50; color: white; }
-#chat { margin-top: 15px; white-space: pre-wrap; }
-.card { background: #222; padding: 10px; border-radius: 10px; margin-bottom: 10px; }
+body {
+    margin: 0;
+    font-family: Arial;
+    background: #111;
+    color: white;
+    display: flex;
+    height: 100vh;
+}
+
+#sidebar {
+    width: 240px;
+    background: #1b1b1b;
+    padding: 10px;
+    overflow-y: auto;
+    border-right: 1px solid #333;
+}
+
+.chat-item {
+    padding: 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-bottom: 5px;
+    background: #222;
+}
+
+.chat-item:hover { background: #333; }
+.chat-item.active { background: #4CAF50; }
+
+#main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 10px;
+}
+
+#chat {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.card {
+    padding: 10px;
+    border-radius: 8px;
+    background: #222;
+}
+
+.card.user { background: #2a2a2a; }
+.card.ai { background: #1e3a1e; }
+
+textarea {
+    flex: 1;
+    padding: 10px;
+    border-radius: 6px;
+    border: none;
+    resize: none;
+    height: 60px;
+}
+
+button {
+    padding: 8px 10px;
+    border: none;
+    border-radius: 6px;
+    background: #4CAF50;
+    color: white;
+    cursor: pointer;
+}
+
+img {
+    max-width: 100%;
+    border-radius: 6px;
+    margin-top: 5px;
+}
 </style>
 </head>
 <body>
 
-<h2>📱 Android Vision Chat</h2>
+<div id="sidebar">
+    <button onclick="createNewChat()">+ Новый чат</button>
+    <div id="chatList"></div>
+</div>
 
-<input type="file" id="imageInput" accept="image/*"><br><br>
-<img id="preview">
+<div id="main">
+    <div id="chat"></div>
 
-<textarea id="prompt" placeholder="Напиши или скажи запрос..."></textarea>
+    <input type="file" id="imageInput" accept="image/*"><br><br>
 
-<button onclick="startVoice()">🎤 Голос</button>
-<button onclick="sendToAI()">Отправить</button>
-
-<div id="chat"></div>
+    <div style="display:flex; gap:5px;">
+        <textarea id="prompt" placeholder="Напиши сообщение..."></textarea>
+        <button onclick="sendMessage()">Отправить</button>
+    </div>
+</div>
 
 <script>
 
-let base64Image = "";
+let currentChatId = null;
+let base64Image = null;
 
-document.getElementById("imageInput").addEventListener("change", function(e){
-    const file = e.target.files[0];
-    const reader = new FileReader();
-    reader.onload = function(){
-        base64Image = reader.result.split(",")[1];
-        document.getElementById("preview").src = reader.result;
-    };
-    reader.readAsDataURL(file);
-});
 
-// Голосовой ввод
-function startVoice(){
-    const recognition = new webkitSpeechRecognition();
-    recognition.lang = "ru-RU";
-    recognition.start();
-    recognition.onresult = function(event){
-        document.getElementById("prompt").value = event.results[0][0].transcript;
-    };
+// ===== Загрузка чатов =====
+async function loadChats(){
+    const res = await fetch("/api/get_chats");
+    const chats = await res.json();
+
+    const list = document.getElementById("chatList");
+    list.innerHTML = "";
+
+    chats.forEach(chat => {
+        const div = document.createElement("div");
+        div.className = "chat-item";
+        div.innerText = "Чат #" + chat.id;
+        div.onclick = () => selectChat(chat.id);
+        div.id = "chat-" + chat.id;
+        list.appendChild(div);
+    });
 }
 
-async function sendToAI(){
 
-    const prompt = document.getElementById("prompt").value;
-    if(!base64Image) return alert("Выбери изображение!");
+// ===== Создать чат =====
+async function createNewChat(){
+    const res = await fetch("/api/create_chat", { method: "POST" });
+    const data = await res.json();
+    currentChatId = data.chat_id;
 
-    document.getElementById("chat").innerHTML += `<div class="card"><b>Ты:</b> ${prompt}</div>`;
-    document.getElementById("chat").innerHTML += `<div class="card">AI думает...</div>`;
+    await loadChats();
+    selectChat(currentChatId);
+}
 
-    const response = await fetch("/api/analyze", {
+
+// ===== Выбрать чат =====
+async function selectChat(chatId){
+    currentChatId = chatId;
+
+    document.querySelectorAll(".chat-item").forEach(el =>
+        el.classList.remove("active")
+    );
+
+    document.getElementById("chat-"+chatId)?.classList.add("active");
+
+    const res = await fetch("/api/get_messages/" + chatId);
+    const messages = await res.json();
+
+    const chatDiv = document.getElementById("chat");
+    chatDiv.innerHTML = "";
+
+    messages.forEach(msg => {
+        addMessage(
+            msg.role === "assistant" ? "AI" : "Ты",
+            msg.content,
+            msg.role === "assistant" ? "ai" : "user",
+            msg.image
+        );
+    });
+}
+
+
+// ===== Отправка =====
+async function sendMessage(){
+
+    const textarea = document.getElementById("prompt");
+    const text = textarea.value.trim();
+
+    if(!text && !base64Image) return;
+    if(!currentChatId) return;
+
+    textarea.value = "";
+
+    addMessage("Ты", text, "user", base64Image);
+
+    const res = await fetch("/api/send_message", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-            prompt: prompt,
+            chat_id: currentChatId,
+            prompt: text,
             image: base64Image
         })
     });
 
-    const data = await response.json();
+    const data = await res.json();
+    addMessage("AI", data.answer, "ai");
 
-    document.getElementById("chat").innerHTML += `<div class="card"><b>AI:</b> ${data.answer}</div>`;
+    base64Image = null;
+    document.getElementById("imageInput").value = "";
 }
 
-if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('service-worker.js');
+
+// ===== Добавить сообщение =====
+function addMessage(author, text, type, image=null){
+
+    const chat = document.getElementById("chat");
+
+    const div = document.createElement("div");
+    div.className = "card " + type;
+
+    let html = "<b>" + author + ":</b><br>";
+
+    if(text)
+        html += text.replace(/\n/g, "<br>");
+
+    if(image)
+        html += `<br><img src="data:image/png;base64,${image}">`;
+
+    div.innerHTML = html;
+
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
 }
+
+
+// ===== Загрузка картинки =====
+document.getElementById("imageInput").addEventListener("change", function(e){
+    const file = e.target.files[0];
+    if(!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function(){
+        base64Image = reader.result.split(",")[1];
+    };
+    reader.readAsDataURL(file);
+});
+
+
+// ===== Enter отправка =====
+document.getElementById("prompt").addEventListener("keydown", function(e){
+    if(e.key === "Enter" && !e.shiftKey){
+        e.preventDefault();
+        sendMessage();
+    }
+});
+
+
+loadChats();
 
 </script>
-
 </body>
 </html>
