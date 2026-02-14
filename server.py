@@ -149,24 +149,24 @@ def send_message():
 
     for role, content, image in history:
 
-        message_content = []
+    message_content = []
 
-        if content:
-            message_content.append({
-                "type": "input_text",
-                "text": content
-            })
-
-        if image:
-            message_content.append({
-                "type": "input_image",
-                "image_url": f"data:image/png;base64,{image}"
-            })
-
-        openai_messages.append({
-            "role": role,
-            "content": message_content
+    if content is not None:
+        message_content.append({
+            "type": "input_text",
+            "text": content
         })
+
+    if image:
+        message_content.append({
+            "type": "input_image",
+            "image_url": f"data:image/png;base64,{image}"
+        })
+
+    openai_messages.append({
+        "role": role,
+        "content": message_content
+    })
 
     response = client.responses.create(
         model="gpt-4.1-mini",
@@ -190,3 +190,4 @@ def send_message():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 10000))
     app.run(host="0.0.0.0", port=port)
+
