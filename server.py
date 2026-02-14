@@ -5,7 +5,6 @@ import sqlite3
 from datetime import datetime
 
 app = Flask(__name__)
-
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 DB_FILE = "chats.db"
@@ -31,6 +30,7 @@ def init_db():
             chat_id INTEGER,
             role TEXT,
             content TEXT,
+            image TEXT,
             timestamp TEXT
         )
     """)
@@ -43,7 +43,7 @@ init_db()
 
 
 # =========================
-# ГЛАВНАЯ СТРАНИЦА
+# ГЛАВНАЯ
 # =========================
 @app.route("/")
 def home():
@@ -51,7 +51,7 @@ def home():
 
 
 # =========================
-# СОЗДАТЬ НОВЫЙ ЧАТ
+# СОЗДАТЬ ЧАТ
 # =========================
 @app.route("/api/create_chat", methods=["POST"])
 def create_chat():
@@ -69,7 +69,7 @@ def create_chat():
 
 
 # =========================
-# ПОЛУЧИТЬ СПИСОК ЧАТОВ
+# СПИСОК ЧАТОВ
 # =========================
 @app.route("/api/get_chats")
 def get_chats():
@@ -88,7 +88,7 @@ def get_chats():
 
 
 # =========================
-# ПОЛУЧИТЬ СООБЩЕНИЯ ЧАТА
+# ПОЛУЧИТЬ СООБЩЕНИЯ
 # =========================
 @app.route("/api/get_messages/<int:chat_id>")
 def get_messages(chat_id):
@@ -96,7 +96,8 @@ def get_messages(chat_id):
     c = conn.cursor()
 
     c.execute("""
-        SELECT role, content FROM messages
+        SELECT role, content, image
+        FROM messages
         WHERE chat_id=?
         ORDER BY id ASC
     """, (chat_id,))
@@ -105,7 +106,7 @@ def get_messages(chat_id):
     conn.close()
 
     return jsonify([
-        {"role": m[0], "content": m[1]}
+        {"role": m[0], "content": m[1], "image": m[2]}
         for m in messages
     ])
 
@@ -119,35 +120,52 @@ def send_message():
     data = request.json
     chat_id = data.get("chat_id")
     prompt = data.get("prompt")
+    image_base64 = data.get("image")
 
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
 
     now = datetime.utcnow().isoformat()
 
-    # сохраняем сообщение пользователя
+    # Сохраняем сообщение пользователя
     c.execute("""
-        INSERT INTO messages (chat_id, role, content, timestamp)
-        VALUES (?, ?, ?, ?)
-    """, (chat_id, "user", prompt, now))
+        INSERT INTO messages (chat_id, role, content, image, timestamp)
+        VALUES (?, ?, ?, ?, ?)
+    """, (chat_id, "user", prompt, image_base64, now))
 
     conn.commit()
 
-    # получаем историю чата
+    # Получаем всю историю
     c.execute("""
-        SELECT role, content FROM messages
+        SELECT role, content, image
+        FROM messages
         WHERE chat_id=?
         ORDER BY id ASC
     """, (chat_id,))
 
     history = c.fetchall()
 
-    # готовим историю для OpenAI
     openai_messages = []
-    for role, content in history:
+
+    for role, content, image in history:
+
+        message_content = []
+
+        if content:
+            message_content.append({
+                "type": "input_text",
+                "text": content
+            })
+
+        if image:
+            message_content.append({
+                "type": "input_image",
+                "image_url": f"data:image/png;base64,{image}"
+            })
+
         openai_messages.append({
             "role": role,
-            "content": [{"type": "input_text", "text": content}]
+            "content": message_content
         })
 
     response = client.responses.create(
@@ -157,11 +175,11 @@ def send_message():
 
     answer = response.output_text
 
-    # сохраняем ответ ассистента
+    # Сохраняем ответ AI
     c.execute("""
-        INSERT INTO messages (chat_id, role, content, timestamp)
-        VALUES (?, ?, ?, ?)
-    """, (chat_id, "assistant", answer, now))
+        INSERT INTO messages (chat_id, role, content, image, timestamp)
+        VALUES (?, ?, ?, ?, ?)
+    """, (chat_id, "assistant", answer, None, now))
 
     conn.commit()
     conn.close()
