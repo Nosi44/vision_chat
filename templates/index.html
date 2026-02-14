@@ -161,32 +161,14 @@ async function sendToAI(){
         thinking.remove();
 
         const data = await response.json();
-const data = await response.json();
 
-if(data.error){
-    addMessage("Ошибка", data.error, "ai");
-    return;
-}
+        if(data.error){
+            addMessage("Ошибка", data.error, "ai");
+            return;
+        }
 
-// 🎨 Если пришла сгенерированная картинка
-if(data.generated_image){
-
-    const imgDiv = document.createElement("div");
-    imgDiv.className = "card ai";
-    imgDiv.innerHTML = `
-        <b>AI:</b><br>
-        <img src="data:image/png;base64,${data.generated_image}">
-    `;
-
-    document.getElementById("chat").prepend(imgDiv);
-    saveChat();
-    base64Image = null;
-    return;
-}
-
-// 🧠 Иначе обычный текст
-addMessage("AI", data.answer, "ai");
-base64Image = null;
+        addMessage("AI", data.answer, "ai");
+        base64Image = null;
 
     } catch (err) {
         thinking.remove();
@@ -214,4 +196,3 @@ function addMessage(author, text, type){
 
 </body>
 </html>
-
