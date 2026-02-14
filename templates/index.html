@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Android Vision Chat v2</title>
+<title>Android Vision Chat v3</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
@@ -16,7 +16,7 @@ body {
 #chat {
     margin-top: 15px;
     display: flex;
-    flex-direction: column-reverse; /* Новые сообщения сверху */
+    flex-direction: column;
     gap: 10px;
 }
 
@@ -32,6 +32,12 @@ body {
 
 .card.ai {
     background: #1e3a1e;
+}
+
+.card.thinking {
+    background: #333333;
+    font-style: italic;
+    opacity: 0.8;
 }
 
 .card.image-card img {
@@ -80,8 +86,8 @@ button {
 
 let base64Image = null;
 let firstMessage = true;
-let imageCardElement = null;
 
+// === Загрузка изображения ===
 document.getElementById("imageInput").addEventListener("change", function(e){
     const file = e.target.files[0];
     if(!file) return;
@@ -91,17 +97,12 @@ document.getElementById("imageInput").addEventListener("change", function(e){
 
         base64Image = reader.result.split(",")[1];
 
-        // Удаляем старую картинку если была
-        if(imageCardElement){
-            imageCardElement.remove();
-        }
+        // Картинка добавляется СВЕРХУ как обычное сообщение
+        const imageDiv = document.createElement("div");
+        imageDiv.className = "card image-card user";
+        imageDiv.innerHTML = `<img src="${reader.result}">`;
 
-        imageCardElement = document.createElement("div");
-        imageCardElement.className = "card image-card";
-        imageCardElement.innerHTML = `<img src="${reader.result}">`;
-
-        // Добавляем в самый низ чата
-        document.getElementById("chat").appendChild(imageCardElement);
+        document.getElementById("chat").prepend(imageDiv);
     };
     reader.readAsDataURL(file);
 });
@@ -114,6 +115,7 @@ document.getElementById("prompt").addEventListener("keydown", function(e){
     }
 });
 
+// === Отправка ===
 async function sendToAI(){
 
     const promptInput = document.getElementById("prompt");
@@ -124,6 +126,12 @@ async function sendToAI(){
     promptInput.value = "";
 
     addMessage("Ты", prompt, "user");
+
+    // Индикатор "AI думает"
+    const thinkingDiv = document.createElement("div");
+    thinkingDiv.className = "card thinking ai";
+    thinkingDiv.innerHTML = "<b>AI:</b><br>AI is thinking...";
+    document.getElementById("chat").prepend(thinkingDiv);
 
     try {
 
@@ -136,6 +144,8 @@ async function sendToAI(){
                 first: firstMessage
             })
         });
+
+        thinkingDiv.remove();
 
         if(!response.ok){
             addMessage("Ошибка", "Ошибка сервера", "ai");
@@ -152,25 +162,26 @@ async function sendToAI(){
         addMessage("AI", data.answer, "ai");
 
         firstMessage = false;
-        base64Image = null; // после отправки больше не шлём картинку
+        base64Image = null;
 
     } catch (error) {
+        thinkingDiv.remove();
         addMessage("Ошибка", error.toString(), "ai");
     }
 }
 
+// === Добавление сообщения ===
 function addMessage(author, text, type){
     const chat = document.getElementById("chat");
 
     const div = document.createElement("div");
     div.className = "card " + type;
-    div.innerHTML = "<b>" + author + ":</b><br>" + text;
+    div.innerHTML = "<b>" + author + ":</b><br>" + text.replace(/\n/g, "<br>");
 
-    chat.prepend(div); // Новые сообщения сверху
+    chat.prepend(div);
 }
 
 </script>
 
 </body>
 </html>
-
