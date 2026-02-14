@@ -3,6 +3,7 @@ from openai import OpenAI
 import os
 
 app = Flask(__name__)
+
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 conversation_history = []
@@ -23,34 +24,32 @@ def analyze():
     if not prompt and not image_base64:
         return jsonify({"error": "Пустой запрос"}), 400
 
-    lower_prompt = prompt.lower() if prompt else ""
+    # ===============================
+    # 🎨 КЛЮЧЕВЫЕ СЛОВА ДЛЯ ГЕНЕРАЦИИ
+    # ===============================
+    generation_keywords = [
+        "нарисуй",
+        "создай изображение",
+        "сгенерируй",
+        "draw",
+        "generate image",
+        "create image"
+    ]
 
-    # ============================
-    # 🎨 Генерация с нуля
-    # ============================
-    generation_keywords = ["нарисуй", "сгенерируй", "draw", "generate"]
+    is_generation_request = False
 
-    if prompt and any(word in lower_prompt for word in generation_keywords) and not image_base64:
-        try:
-            img = client.images.generate(
-                model="gpt-image-1",
-                prompt=prompt,
-                size="512x512"
-            )
+    if prompt:
+        lower_prompt = prompt.lower()
+        for word in generation_keywords:
+            if word in lower_prompt:
+                is_generation_request = True
+                break
 
-            return jsonify({
-                "generated_image": img.data[0].b64_json
-            })
-
-        except Exception as e:
-            return jsonify({"error": str(e)}), 500
-
-    # ============================
-    # 🖌 Редактирование
-    # ============================
-    edit_keywords = ["измени", "добавь", "переделай", "change", "add"]
-
-    if image_base64 and prompt and any(word in lower_prompt for word in edit_keywords):
+    # ===============================
+    # 🖌 РЕДАКТИРОВАНИЕ КАРТИНКИ
+    # (если есть image + текст)
+    # ===============================
+    if image_base64 and prompt:
         try:
             img = client.images.generate(
                 model="gpt-image-1",
@@ -59,17 +58,38 @@ def analyze():
                 size="512x512"
             )
 
+            new_image = img.data[0].b64_json
+
             return jsonify({
-                "generated_image": img.data[0].b64_json
+                "generated_image": new_image
             })
 
         except Exception as e:
             return jsonify({"error": str(e)}), 500
 
-    # ============================
-    # 🧠 Vision или обычный чат
-    # ============================
+    # ===============================
+    # 🎨 ГЕНЕРАЦИЯ С НУЛЯ
+    # ===============================
+    if is_generation_request and not image_base64:
+        try:
+            img = client.images.generate(
+                model="gpt-image-1",
+                prompt=prompt,
+                size="512x512"
+            )
 
+            new_image = img.data[0].b64_json
+
+            return jsonify({
+                "generated_image": new_image
+            })
+
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
+
+    # ===============================
+    # 🧠 ОБЫЧНЫЙ ЧАТ / VISION
+    # ===============================
     message_content = []
 
     if prompt:
