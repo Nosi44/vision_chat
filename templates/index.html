@@ -2,71 +2,16 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>Android Vision Chat v3</title>
+<title>Android Vision Chat</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
+<link rel="manifest" href="manifest.json">
 <style>
-body {
-    font-family: Arial;
-    margin: 10px;
-    background: #111;
-    color: white;
-}
-
-#chat {
-    margin-top: 15px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
-.card {
-    background: #222;
-    padding: 10px;
-    border-radius: 10px;
-}
-
-.card.user {
-    background: #2a2a2a;
-}
-
-.card.ai {
-    background: #1e3a1e;
-}
-
-.card.thinking {
-    background: #333333;
-    font-style: italic;
-    opacity: 0.8;
-}
-
-.card.image-card img {
-    max-width: 100%;
-    border-radius: 8px;
-}
-
-.input-row {
-    display: flex;
-    gap: 5px;
-}
-
-textarea {
-    flex: 1;
-    padding: 10px;
-    border-radius: 8px;
-    border: none;
-    resize: none;
-    height: 60px;
-}
-
-button {
-    padding: 10px 15px;
-    border-radius: 8px;
-    border: none;
-    background: #4CAF50;
-    color: white;
-    cursor: pointer;
-}
+body { font-family: Arial; margin: 10px; background: #111; color: white; }
+img { max-width: 100%; border-radius: 8px; margin-bottom: 10px; }
+textarea, input { width: 100%; padding: 10px; border-radius: 8px; border: none; }
+button { padding: 10px; margin-top: 5px; border-radius: 8px; border: none; background: #4CAF50; color: white; }
+#chat { margin-top: 15px; white-space: pre-wrap; }
+.card { background: #222; padding: 10px; border-radius: 10px; margin-bottom: 10px; }
 </style>
 </head>
 <body>
@@ -74,111 +19,63 @@ button {
 <h2>📱 Android Vision Chat</h2>
 
 <input type="file" id="imageInput" accept="image/*"><br><br>
+<img id="preview">
 
-<div class="input-row">
-    <textarea id="prompt" placeholder="Напиши запрос..."></textarea>
-    <button onclick="sendToAI()">Отправить</button>
-</div>
+<textarea id="prompt" placeholder="Напиши или скажи запрос..."></textarea>
+
+<button onclick="startVoice()">🎤 Голос</button>
+<button onclick="sendToAI()">Отправить</button>
 
 <div id="chat"></div>
 
 <script>
 
-let base64Image = null;
-let firstMessage = true;
+let base64Image = "";
 
-// === Загрузка изображения ===
 document.getElementById("imageInput").addEventListener("change", function(e){
     const file = e.target.files[0];
-    if(!file) return;
-
     const reader = new FileReader();
     reader.onload = function(){
-
         base64Image = reader.result.split(",")[1];
-
-        // Картинка добавляется СВЕРХУ как обычное сообщение
-        const imageDiv = document.createElement("div");
-        imageDiv.className = "card image-card user";
-        imageDiv.innerHTML = `<img src="${reader.result}">`;
-
-        document.getElementById("chat").prepend(imageDiv);
+        document.getElementById("preview").src = reader.result;
     };
     reader.readAsDataURL(file);
 });
 
-// Enter отправляет, Shift+Enter перенос строки
-document.getElementById("prompt").addEventListener("keydown", function(e){
-    if(e.key === "Enter" && !e.shiftKey){
-        e.preventDefault();
-        sendToAI();
-    }
-});
-
-// === Отправка ===
-async function sendToAI(){
-
-    const promptInput = document.getElementById("prompt");
-    const prompt = promptInput.value.trim();
-
-    if(!prompt) return;
-
-    promptInput.value = "";
-
-    addMessage("Ты", prompt, "user");
-
-    // Индикатор "AI думает"
-    const thinkingDiv = document.createElement("div");
-    thinkingDiv.className = "card thinking ai";
-    thinkingDiv.innerHTML = "<b>AI:</b><br>AI is thinking...";
-    document.getElementById("chat").prepend(thinkingDiv);
-
-    try {
-
-        const response = await fetch("/api/analyze", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                prompt: prompt,
-                image: base64Image,
-                first: firstMessage
-            })
-        });
-
-        thinkingDiv.remove();
-
-        if(!response.ok){
-            addMessage("Ошибка", "Ошибка сервера", "ai");
-            return;
-        }
-
-        const data = await response.json();
-
-        if(data.error){
-            addMessage("Ошибка", data.error, "ai");
-            return;
-        }
-
-        addMessage("AI", data.answer, "ai");
-
-        firstMessage = false;
-        base64Image = null;
-
-    } catch (error) {
-        thinkingDiv.remove();
-        addMessage("Ошибка", error.toString(), "ai");
-    }
+// Голосовой ввод
+function startVoice(){
+    const recognition = new webkitSpeechRecognition();
+    recognition.lang = "ru-RU";
+    recognition.start();
+    recognition.onresult = function(event){
+        document.getElementById("prompt").value = event.results[0][0].transcript;
+    };
 }
 
-// === Добавление сообщения ===
-function addMessage(author, text, type){
-    const chat = document.getElementById("chat");
+async function sendToAI(){
 
-    const div = document.createElement("div");
-    div.className = "card " + type;
-    div.innerHTML = "<b>" + author + ":</b><br>" + text.replace(/\n/g, "<br>");
+    const prompt = document.getElementById("prompt").value;
+    if(!base64Image) return alert("Выбери изображение!");
 
-    chat.prepend(div);
+    document.getElementById("chat").innerHTML += `<div class="card"><b>Ты:</b> ${prompt}</div>`;
+    document.getElementById("chat").innerHTML += `<div class="card">AI думает...</div>`;
+
+    const response = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            prompt: prompt,
+            image: base64Image
+        })
+    });
+
+    const data = await response.json();
+
+    document.getElementById("chat").innerHTML += `<div class="card"><b>AI:</b> ${data.answer}</div>`;
+}
+
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('service-worker.js');
 }
 
 </script>
