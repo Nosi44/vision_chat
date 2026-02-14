@@ -1,188 +1,70 @@
 from flask import Flask, request, jsonify, render_template
 from openai import OpenAI
 import os
-import sqlite3
-from datetime import datetime
 
 app = Flask(__name__)
+
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-DB_FILE = "chats.db"
+conversation_history = []
 
 
-# =========================
-# ИНИЦИАЛИЗАЦИЯ БАЗЫ
-# =========================
-def init_db():
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS chats (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            created_at TEXT
-        )
-    """)
-
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS messages (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            chat_id INTEGER,
-            role TEXT,
-            content TEXT,
-            image TEXT,
-            timestamp TEXT
-        )
-    """)
-
-    conn.commit()
-    conn.close()
-
-
-init_db()
-
-
-# =========================
-# ГЛАВНАЯ
-# =========================
 @app.route("/")
 def home():
     return render_template("index.html")
 
 
-# =========================
-# СОЗДАТЬ ЧАТ
-# =========================
-@app.route("/api/create_chat", methods=["POST"])
-def create_chat():
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
+@app.route("/api/analyze", methods=["POST"])
+def analyze():
 
-    now = datetime.utcnow().isoformat()
-    c.execute("INSERT INTO chats (created_at) VALUES (?)", (now,))
-    chat_id = c.lastrowid
-
-    conn.commit()
-    conn.close()
-
-    return jsonify({"chat_id": chat_id})
-
-
-# =========================
-# СПИСОК ЧАТОВ
-# =========================
-@app.route("/api/get_chats")
-def get_chats():
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-
-    c.execute("SELECT id, created_at FROM chats ORDER BY id DESC")
-    chats = c.fetchall()
-
-    conn.close()
-
-    return jsonify([
-        {"id": chat[0], "created_at": chat[1]}
-        for chat in chats
-    ])
-
-
-# =========================
-# ПОЛУЧИТЬ СООБЩЕНИЯ
-# =========================
-@app.route("/api/get_messages/<int:chat_id>")
-def get_messages(chat_id):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-
-    c.execute("""
-        SELECT role, content, image
-        FROM messages
-        WHERE chat_id=?
-        ORDER BY id ASC
-    """, (chat_id,))
-
-    messages = c.fetchall()
-    conn.close()
-
-    return jsonify([
-        {"role": m[0], "content": m[1], "image": m[2]}
-        for m in messages
-    ])
-
-
-# =========================
-# ОТПРАВКА СООБЩЕНИЯ
-# =========================
-@app.route("/api/send_message", methods=["POST"])
-def send_message():
+    global conversation_history
 
     data = request.json
-    chat_id = data.get("chat_id")
     prompt = data.get("prompt")
     image_base64 = data.get("image")
+    is_first_message = data.get("first", False)
 
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
+    if not prompt:
+        return jsonify({"error": "Empty prompt"}), 400
 
-    now = datetime.utcnow().isoformat()
+    # Если новая сессия — очищаем память
+    if is_first_message:
+        conversation_history = []
 
-    # Сохраняем сообщение пользователя
-    c.execute("""
-        INSERT INTO messages (chat_id, role, content, image, timestamp)
-        VALUES (?, ?, ?, ?, ?)
-    """, (chat_id, "user", prompt, image_base64, now))
+    # Формируем контент пользователя
+    user_content = [
+        {"type": "input_text", "text": prompt}
+    ]
 
-    conn.commit()
-
-    # Получаем всю историю
-    c.execute("""
-        SELECT role, content, image
-        FROM messages
-        WHERE chat_id=?
-        ORDER BY id ASC
-    """, (chat_id,))
-
-    history = c.fetchall()
-
-    openai_messages = []
-
-    for role, content, image in history:
-
-        message_content = []
-
-        if content:
-            message_content.append({
-                "type": "input_text",
-                "text": content
-            })
-
-        if image:
-            message_content.append({
-                "type": "input_image",
-                "image_url": f"data:image/png;base64,{image}"
-            })
-
-        openai_messages.append({
-            "role": role,
-            "content": message_content
+    # Добавляем картинку только если она реально есть
+    if image_base64:
+        user_content.append({
+            "type": "input_image",
+            "image_url": f"data:image/png;base64,{image_base64}"
         })
 
-    response = client.responses.create(
-        model="gpt-4.1-mini",
-        input=openai_messages
-    )
+    conversation_history.append({
+        "role": "user",
+        "content": user_content
+    })
 
-    answer = response.output_text
+    try:
+        response = client.responses.create(
+            model="gpt-4.1-mini",
+            input=conversation_history
+        )
 
-    # Сохраняем ответ AI
-    c.execute("""
-        INSERT INTO messages (chat_id, role, content, image, timestamp)
-        VALUES (?, ?, ?, ?, ?)
-    """, (chat_id, "assistant", answer, None, now))
+        answer = response.output_text
 
-    conn.commit()
-    conn.close()
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    conversation_history.append({
+        "role": "assistant",
+        "content": [
+            {"type": "output_text", "text": answer}
+        ]
+    })
 
     return jsonify({"answer": answer})
 
