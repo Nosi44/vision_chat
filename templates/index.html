@@ -1,91 +1,26 @@
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<title>Android Vision Chat v3</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-<style>
-body {
-    font-family: Arial;
-    margin: 10px;
-    background: #111;
-    color: white;
-}
-
-#chat {
-    margin-top: 15px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
-.card {
-    background: #222;
-    padding: 10px;
-    border-radius: 10px;
-}
-
-.card.user {
-    background: #2a2a2a;
-}
-
-.card.ai {
-    background: #1e3a1e;
-}
-
-.card.thinking {
-    background: #333333;
-    font-style: italic;
-    opacity: 0.8;
-}
-
-.card.image-card img {
-    max-width: 100%;
-    border-radius: 8px;
-}
-
-.input-row {
-    display: flex;
-    gap: 5px;
-}
-
-textarea {
-    flex: 1;
-    padding: 10px;
-    border-radius: 8px;
-    border: none;
-    resize: none;
-    height: 60px;
-}
-
-button {
-    padding: 10px 15px;
-    border-radius: 8px;
-    border: none;
-    background: #4CAF50;
-    color: white;
-    cursor: pointer;
-}
-</style>
-</head>
-<body>
-
-<h2>📱 Android Vision Chat</h2>
-
-<input type="file" id="imageInput" accept="image/*"><br><br>
-
-<div class="input-row">
-    <textarea id="prompt" placeholder="Напиши запрос..."></textarea>
-    <button onclick="sendToAI()">Отправить</button>
-</div>
-
-<div id="chat"></div>
-
 <script>
 
 let base64Image = null;
 let firstMessage = true;
+
+// ==========================
+// Загрузка сохранённого чата
+// ==========================
+function loadChat(){
+    const saved = localStorage.getItem("vision_chat_history");
+    if(saved){
+        document.getElementById("chat").innerHTML = saved;
+    }
+}
+
+function saveChat(){
+    const chatHTML = document.getElementById("chat").innerHTML;
+    localStorage.setItem("vision_chat_history", chatHTML);
+}
+
+// Загружаем при старте
+loadChat();
+
 
 // === Загрузка изображения ===
 document.getElementById("imageInput").addEventListener("change", function(e){
@@ -97,15 +32,17 @@ document.getElementById("imageInput").addEventListener("change", function(e){
 
         base64Image = reader.result.split(",")[1];
 
-        // Картинка добавляется СВЕРХУ как обычное сообщение
         const imageDiv = document.createElement("div");
         imageDiv.className = "card image-card user";
         imageDiv.innerHTML = `<img src="${reader.result}">`;
 
         document.getElementById("chat").prepend(imageDiv);
+
+        saveChat(); // сохраняем после добавления картинки
     };
     reader.readAsDataURL(file);
 });
+
 
 // Enter отправляет, Shift+Enter перенос строки
 document.getElementById("prompt").addEventListener("keydown", function(e){
@@ -114,6 +51,7 @@ document.getElementById("prompt").addEventListener("keydown", function(e){
         sendToAI();
     }
 });
+
 
 // === Отправка ===
 async function sendToAI(){
@@ -127,7 +65,6 @@ async function sendToAI(){
 
     addMessage("Ты", prompt, "user");
 
-    // Индикатор "AI думает"
     const thinkingDiv = document.createElement("div");
     thinkingDiv.className = "card thinking ai";
     thinkingDiv.innerHTML = "<b>AI:</b><br>AI is thinking...";
@@ -170,6 +107,7 @@ async function sendToAI(){
     }
 }
 
+
 // === Добавление сообщения ===
 function addMessage(author, text, type){
     const chat = document.getElementById("chat");
@@ -179,9 +117,8 @@ function addMessage(author, text, type){
     div.innerHTML = "<b>" + author + ":</b><br>" + text.replace(/\n/g, "<br>");
 
     chat.prepend(div);
+
+    saveChat(); // сохраняем после каждого сообщения
 }
 
 </script>
-
-</body>
-</html>
