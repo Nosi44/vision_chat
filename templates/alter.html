@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Генератор стихов</title>
+</head>
+<body>
+
+<h2>Нажмите кнопку, чтобы получить стих</h2>
+
+<button onclick="generatePoem()">Сгенерировать стих</button>
+
+<p id="result"></p>
+
+<script>
+function generatePoem() {
+
+    const poems = [
+        "В тумане шепчет старый кран,\nЛетит по небу чемодан,\nИ чайник думает о снах,\nЗастряв в забытых проводах.",
+        
+        "Соседский кот — философ дня,\nОн размышляет у огня,\nКакой сегодня смысл у гроз,\nИ где растёт зелёный мозг.",
+        
+        "Луна в кармане у меня,\nШуршит космическим ремням,\nА холодильник по ночам\nЧитает рэп по облакам."
+    ];
+
+    const randomIndex = Math.floor(Math.random() * poems.length);
+    document.getElementById("result").innerText = poems[randomIndex];
+}
+</script>
+
+</body>
+</html>
