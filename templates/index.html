@@ -61,7 +61,7 @@ button {
 </head>
 <body>
 
-<h2>📱 Vision Chat v3</h2>
+<h2>📱 Vision Chat v2</h2>
 
 <input type="file" id="imageInput" accept="image/*"><br><br>
 
@@ -77,36 +77,20 @@ button {
 let base64Image = null;
 
 // ====================
-// SAFE STORAGE (без JSON)
+// LOCAL STORAGE
 // ====================
 function saveChat(){
-    try {
-        const chat = document.getElementById("chat");
-
-        // удаляем изображения перед сохранением
-        const clone = chat.cloneNode(true);
-        clone.querySelectorAll("img").forEach(img => img.remove());
-
-        localStorage.setItem("vision_chat", clone.innerHTML);
-    } catch(e){
-        console.log("Storage disabled");
-    }
+    localStorage.setItem("vision_chat", document.getElementById("chat").innerHTML);
 }
 
 function loadChat(){
-    try {
-        const saved = localStorage.getItem("vision_chat");
-        if(saved){
-            document.getElementById("chat").innerHTML = saved;
-        }
-    } catch(e){
-        console.log("Load failed");
+    const saved = localStorage.getItem("vision_chat");
+    if(saved){
+        document.getElementById("chat").innerHTML = saved;
     }
 }
 
-window.onload = function(){
-    loadChat();
-};
+loadChat();
 
 
 // ====================
@@ -127,6 +111,7 @@ document.getElementById("imageInput").addEventListener("change", function(e){
         imageDiv.innerHTML = `<img src="${reader.result}">`;
 
         document.getElementById("chat").prepend(imageDiv);
+        saveChat();
     };
 
     reader.readAsDataURL(file);
@@ -155,9 +140,7 @@ async function sendToAI(){
 
     input.value = "";
 
-    if(text){
-        addMessage("Ты", text, "user");
-    }
+    addMessage("Ты", text, "user");
 
     const thinking = document.createElement("div");
     thinking.className = "card thinking ai";
@@ -210,5 +193,6 @@ function addMessage(author, text, type){
 }
 
 </script>
+
 </body>
 </html>
