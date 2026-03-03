@@ -77,37 +77,36 @@ button {
 let base64Image = null;
 
 // ====================
-// LOCAL STORAGE (только текст!)
+// SAFE STORAGE (без JSON)
 // ====================
 function saveChat(){
     try {
-        const messages = [];
-        document.querySelectorAll("#chat .card").forEach(card => {
+        const chat = document.getElementById("chat");
 
-            // не сохраняем изображения
-            if(card.querySelector("img")) return;
+        // удаляем изображения перед сохранением
+        const clone = chat.cloneNode(true);
+        clone.querySelectorAll("img").forEach(img => img.remove());
 
-            messages.push(card.outerHTML);
-        });
-
-        localStorage.setItem("vision_chat", JSON.stringify(messages));
-
+        localStorage.setItem("vision_chat", clone.innerHTML);
     } catch(e){
-        console.log("Storage limit reached, chat not fully saved.");
+        console.log("Storage disabled");
     }
 }
 
 function loadChat(){
-    const saved = localStorage.getItem("vision_chat");
-    if(saved){
-        const messages = JSON.parse(saved);
-        messages.forEach(msg => {
-            document.getElementById("chat").innerHTML += msg;
-        });
+    try {
+        const saved = localStorage.getItem("vision_chat");
+        if(saved){
+            document.getElementById("chat").innerHTML = saved;
+        }
+    } catch(e){
+        console.log("Load failed");
     }
 }
 
-loadChat();
+window.onload = function(){
+    loadChat();
+};
 
 
 // ====================
@@ -128,7 +127,6 @@ document.getElementById("imageInput").addEventListener("change", function(e){
         imageDiv.innerHTML = `<img src="${reader.result}">`;
 
         document.getElementById("chat").prepend(imageDiv);
-        // НЕ сохраняем изображения в storage
     };
 
     reader.readAsDataURL(file);
@@ -212,6 +210,5 @@ function addMessage(author, text, type){
 }
 
 </script>
-
 </body>
 </html>
