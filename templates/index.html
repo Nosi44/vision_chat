@@ -61,7 +61,7 @@ button {
 </head>
 <body>
 
-<h2>📱 Vision Chat v2</h2>
+<h2>📱 Vision Chat v3</h2>
 
 <input type="file" id="imageInput" accept="image/*"><br><br>
 
@@ -77,16 +77,33 @@ button {
 let base64Image = null;
 
 // ====================
-// LOCAL STORAGE
+// LOCAL STORAGE (только текст!)
 // ====================
 function saveChat(){
-    localStorage.setItem("vision_chat", document.getElementById("chat").innerHTML);
+    try {
+        const messages = [];
+        document.querySelectorAll("#chat .card").forEach(card => {
+
+            // не сохраняем изображения
+            if(card.querySelector("img")) return;
+
+            messages.push(card.outerHTML);
+        });
+
+        localStorage.setItem("vision_chat", JSON.stringify(messages));
+
+    } catch(e){
+        console.log("Storage limit reached, chat not fully saved.");
+    }
 }
 
 function loadChat(){
     const saved = localStorage.getItem("vision_chat");
     if(saved){
-        document.getElementById("chat").innerHTML = saved;
+        const messages = JSON.parse(saved);
+        messages.forEach(msg => {
+            document.getElementById("chat").innerHTML += msg;
+        });
     }
 }
 
@@ -111,7 +128,7 @@ document.getElementById("imageInput").addEventListener("change", function(e){
         imageDiv.innerHTML = `<img src="${reader.result}">`;
 
         document.getElementById("chat").prepend(imageDiv);
-        saveChat();
+        // НЕ сохраняем изображения в storage
     };
 
     reader.readAsDataURL(file);
@@ -140,7 +157,9 @@ async function sendToAI(){
 
     input.value = "";
 
-    addMessage("Ты", text, "user");
+    if(text){
+        addMessage("Ты", text, "user");
+    }
 
     const thinking = document.createElement("div");
     thinking.className = "card thinking ai";
